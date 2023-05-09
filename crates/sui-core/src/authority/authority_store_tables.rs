@@ -4,6 +4,7 @@
 use super::*;
 use crate::authority::authority_store::LockDetailsWrapper;
 use rocksdb::Options;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use sui_types::accumulator::Accumulator;
 use sui_types::base_types::SequenceNumber;
@@ -339,6 +340,7 @@ pub struct LiveSetIter<'a> {
     prev: Option<(ObjectKey, StoreObjectWrapper)>,
 }
 
+#[derive(Eq, PartialEq, Debug, Clone, Deserialize, Serialize, Hash)]
 pub enum LiveObject {
     Normal(Object),
     Wrapped(ObjectKey),
@@ -356,6 +358,13 @@ impl LiveObject {
         match self {
             LiveObject::Normal(obj) => obj.version(),
             LiveObject::Wrapped(key) => key.1,
+        }
+    }
+
+    pub fn object_reference(&self) -> ObjectRef {
+        match self {
+            LiveObject::Normal(obj) => obj.compute_object_reference(),
+            LiveObject::Wrapped(key) => (key.0, key.1, ObjectDigest::OBJECT_DIGEST_WRAPPED),
         }
     }
 }
