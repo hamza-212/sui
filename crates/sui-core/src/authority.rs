@@ -1420,7 +1420,7 @@ impl AuthorityState {
         &self,
         effects: &TransactionEffects,
         epoch_store: &Arc<AuthorityPerEpochStore>,
-    ) -> Result<ObjectIndexChanges, SuiError> {
+    ) -> SuiResult<ObjectIndexChanges> {
         let modified_at_version = effects
             .modified_at_versions()
             .iter()
@@ -1660,7 +1660,7 @@ impl AuthorityState {
     pub async fn handle_transaction_info_request(
         &self,
         request: TransactionInfoRequest,
-    ) -> Result<TransactionInfoResponse, SuiError> {
+    ) -> SuiResult<TransactionInfoResponse> {
         let epoch_store = self.load_epoch_store_one_call_per_task();
         let (transaction, status) = self
             .get_transaction_status(&request.transaction_digest, &epoch_store)?
@@ -1676,7 +1676,7 @@ impl AuthorityState {
     pub async fn handle_object_info_request(
         &self,
         request: ObjectInfoRequest,
-    ) -> Result<ObjectInfoResponse, SuiError> {
+    ) -> SuiResult<ObjectInfoResponse> {
         let epoch_store = self.load_epoch_store_one_call_per_task();
 
         let requested_object_seq = match request.request_kind {
@@ -1729,7 +1729,7 @@ impl AuthorityState {
     pub fn handle_checkpoint_request(
         &self,
         request: &CheckpointRequest,
-    ) -> Result<CheckpointResponse, SuiError> {
+    ) -> SuiResult<CheckpointResponse> {
         let summary = match request.sequence_number {
             Some(seq) => self
                 .checkpoint_store
@@ -1752,7 +1752,7 @@ impl AuthorityState {
     pub fn load_fastpath_input_objects(
         &self,
         effects: &TransactionEffects,
-    ) -> Result<Vec<Object>, SuiError> {
+    ) -> SuiResult<Vec<Object>> {
         // Note: any future addition to the returned object list needs cautions
         // to make sure not to mess up object pruning.
 
@@ -2115,7 +2115,7 @@ impl AuthorityState {
         Committee::clone(self.epoch_store_for_testing().committee())
     }
 
-    pub async fn get_object(&self, object_id: &ObjectID) -> Result<Option<Object>, SuiError> {
+    pub async fn get_object(&self, object_id: &ObjectID) -> SuiResult<Option<Object>> {
         self.database.get_object(object_id)
     }
 
@@ -2167,7 +2167,7 @@ impl AuthorityState {
         Ok(checkpoint)
     }
 
-    pub fn get_object_read(&self, object_id: &ObjectID) -> Result<ObjectRead, SuiError> {
+    pub fn get_object_read(&self, object_id: &ObjectID) -> SuiResult<ObjectRead> {
         match self.database.get_object_or_tombstone(*object_id)? {
             None => Ok(ObjectRead::NotExists(*object_id)),
             Some(obj_ref) => {
@@ -2462,63 +2462,60 @@ impl AuthorityState {
         }
     }
 
-    pub fn get_total_transaction_blocks(&self) -> Result<u64, anyhow::Error> {
+    pub fn get_total_transaction_blocks(&self) -> SuiResult<u64> {
         Ok(self.get_indexes()?.next_sequence_number())
     }
 
     pub async fn get_executed_transaction_and_effects(
         &self,
         digest: TransactionDigest,
-    ) -> Result<(VerifiedTransaction, TransactionEffects), anyhow::Error> {
+    ) -> SuiResult<(VerifiedTransaction, TransactionEffects)> {
         let transaction = self.database.get_transaction_block(&digest)?;
         let effects = self.database.get_executed_effects(&digest)?;
         match (transaction, effects) {
             (Some(transaction), Some(effects)) => Ok((transaction, effects)),
-            _ => Err(anyhow!(SuiError::TransactionNotFound { digest })),
+            _ => Err(SuiError::TransactionNotFound { digest }),
         }
     }
 
     pub async fn get_transaction_block(
         &self,
         digest: TransactionDigest,
-    ) -> Result<VerifiedTransaction, anyhow::Error> {
+    ) -> SuiResult<VerifiedTransaction> {
         let transaction = self.database.get_transaction_block(&digest)?;
-        transaction.ok_or_else(|| anyhow!(SuiError::TransactionNotFound { digest }))
+        transaction.ok_or_else(|| SuiError::TransactionNotFound { digest })
     }
 
-    pub fn get_executed_effects(
-        &self,
-        digest: TransactionDigest,
-    ) -> Result<TransactionEffects, anyhow::Error> {
+    pub fn get_executed_effects(&self, digest: TransactionDigest) -> SuiResult<TransactionEffects> {
         let effects = self.database.get_executed_effects(&digest)?;
-        effects.ok_or_else(|| anyhow!(SuiError::TransactionNotFound { digest }))
+        effects.ok_or_else(|| SuiError::TransactionNotFound { digest })
     }
 
     pub fn multi_get_executed_transactions(
         &self,
         digests: &[TransactionDigest],
-    ) -> Result<Vec<Option<VerifiedTransaction>>, anyhow::Error> {
+    ) -> SuiResult<Vec<Option<VerifiedTransaction>>> {
         Ok(self.database.multi_get_transaction_blocks(digests)?)
     }
 
     pub fn multi_get_executed_effects(
         &self,
         digests: &[TransactionDigest],
-    ) -> Result<Vec<Option<TransactionEffects>>, anyhow::Error> {
+    ) -> SuiResult<Vec<Option<TransactionEffects>>> {
         Ok(self.database.multi_get_executed_effects(digests)?)
     }
 
     pub fn multi_get_transaction_checkpoint(
         &self,
         digests: &[TransactionDigest],
-    ) -> Result<Vec<Option<(EpochId, CheckpointSequenceNumber)>>, anyhow::Error> {
+    ) -> SuiResult<Vec<Option<(EpochId, CheckpointSequenceNumber)>>> {
         Ok(self.database.multi_get_transaction_checkpoint(digests)?)
     }
 
     pub fn multi_get_events(
         &self,
         digests: &[TransactionEventsDigest],
-    ) -> Result<Vec<Option<TransactionEvents>>, anyhow::Error> {
+    ) -> SuiResult<Vec<Option<TransactionEvents>>> {
         Ok(self.database.multi_get_events(digests)?)
     }
 
@@ -2590,12 +2587,12 @@ impl AuthorityState {
         self.checkpoint_store.clone()
     }
 
-    pub fn get_latest_checkpoint_sequence_number(
-        &self,
-    ) -> Result<CheckpointSequenceNumber, anyhow::Error> {
+    pub fn get_latest_checkpoint_sequence_number(&self) -> SuiResult<CheckpointSequenceNumber> {
         self.get_checkpoint_store()
             .get_highest_executed_checkpoint_seq_number()?
-            .ok_or_else(|| anyhow!("Latest checkpoint sequence number not found"))
+            .ok_or_else(|| SuiError::UserInputError {
+                error: UserInputError::LatestCheckpointSequenceNumberNotFound,
+            })
     }
 
     pub fn get_checkpoint_summary_by_sequence_number(
@@ -2616,23 +2613,19 @@ impl AuthorityState {
     pub fn get_checkpoint_summary_by_digest(
         &self,
         digest: CheckpointDigest,
-    ) -> Result<CheckpointSummary, anyhow::Error> {
+    ) -> SuiResult<CheckpointSummary> {
         let verified_checkpoint = self
             .get_checkpoint_store()
             .get_checkpoint_by_digest(&digest)?;
         match verified_checkpoint {
             Some(verified_checkpoint) => Ok(verified_checkpoint.into_inner().into_data()),
-            None => Err(anyhow!(
-                "Verified checkpoint not found for digest: {}",
-                Base58::encode(digest)
-            )),
+            None => Err(SuiError::UserInputError {
+                error: UserInputError::VerifiedCheckpointDigestNotFound(Base58::encode(digest)),
+            }),
         }
     }
 
-    pub fn find_publish_txn_digest(
-        &self,
-        package_id: ObjectID,
-    ) -> Result<TransactionDigest, anyhow::Error> {
+    pub fn find_publish_txn_digest(&self, package_id: ObjectID) -> SuiResult<TransactionDigest> {
         if is_system_package(package_id) {
             return self.find_genesis_txn_digest();
         }
@@ -2642,14 +2635,16 @@ impl AuthorityState {
             .previous_transaction)
     }
 
-    pub fn find_genesis_txn_digest(&self) -> Result<TransactionDigest, anyhow::Error> {
+    pub fn find_genesis_txn_digest(&self) -> SuiResult<TransactionDigest> {
         let summary = self
             .get_verified_checkpoint_by_sequence_number(0)?
             .into_message();
         let content = self.get_checkpoint_contents(summary.content_digest)?;
         let genesis_transaction = content.enumerate_transactions(&summary).next();
         Ok(genesis_transaction
-            .ok_or(anyhow!("No transactions found in checkpoint content"))?
+            .ok_or(SuiError::UserInputError {
+                error: UserInputError::GenesisTransactionNotFound,
+            })?
             .1
             .transaction)
     }
@@ -2672,32 +2667,33 @@ impl AuthorityState {
     pub fn get_verified_checkpoint_summary_by_digest(
         &self,
         digest: CheckpointDigest,
-    ) -> Result<VerifiedCheckpoint, anyhow::Error> {
+    ) -> SuiResult<VerifiedCheckpoint> {
         let verified_checkpoint = self
             .get_checkpoint_store()
             .get_checkpoint_by_digest(&digest)?;
         match verified_checkpoint {
             Some(verified_checkpoint) => Ok(verified_checkpoint),
-            None => Err(anyhow!(
-                "Verified checkpoint not found for digest: {}",
-                Base58::encode(digest)
-            )),
+            None => Err(SuiError::UserInputError {
+                error: UserInputError::VerifiedCheckpointDigestNotFound(Base58::encode(digest)),
+            }),
         }
     }
 
     pub fn get_checkpoint_contents(
         &self,
         digest: CheckpointContentsDigest,
-    ) -> Result<CheckpointContents, anyhow::Error> {
+    ) -> SuiResult<CheckpointContents> {
         self.get_checkpoint_store()
             .get_checkpoint_contents(&digest)?
-            .ok_or_else(|| anyhow!("Checkpoint contents not found for digest: {:?}", digest))
+            .ok_or_else(|| SuiError::UserInputError {
+                error: UserInputError::CheckpointContentsNotFound(digest),
+            })
     }
 
     pub fn get_checkpoint_contents_by_sequence_number(
         &self,
         sequence_number: CheckpointSequenceNumber,
-    ) -> Result<CheckpointContents, anyhow::Error> {
+    ) -> SuiResult<CheckpointContents> {
         let verified_checkpoint = self
             .get_checkpoint_store()
             .get_checkpoint_by_sequence_number(sequence_number)?;
@@ -2706,10 +2702,9 @@ impl AuthorityState {
                 let content_digest = verified_checkpoint.into_inner().content_digest;
                 self.get_checkpoint_contents(content_digest)
             }
-            None => Err(anyhow!(
-                "Verified checkpoint not found for sequence number {}",
-                sequence_number
-            )),
+            None => Err(SuiError::UserInputError {
+                error: UserInputError::VerifiedCheckpointNotFound(sequence_number),
+            }),
         }
     }
 
@@ -2768,10 +2763,7 @@ impl AuthorityState {
         Ok(checkpoints)
     }
 
-    pub async fn get_timestamp_ms(
-        &self,
-        digest: &TransactionDigest,
-    ) -> Result<Option<u64>, anyhow::Error> {
+    pub async fn get_timestamp_ms(&self, digest: &TransactionDigest) -> SuiResult<Option<u64>> {
         Ok(self.get_indexes()?.get_timestamp_ms(digest)?)
     }
 
