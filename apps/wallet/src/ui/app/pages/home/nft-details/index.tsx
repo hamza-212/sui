@@ -22,6 +22,7 @@ import PageTitle from '_src/ui/app/shared/PageTitle';
 function NFTDetailsPage() {
     const [searchParams] = useSearchParams();
     const nftId = searchParams.get('objectId');
+
     const accountAddress = useActiveAddress();
     const { data: objectData, isLoading } = useOwnedNFT(
         nftId || '',
