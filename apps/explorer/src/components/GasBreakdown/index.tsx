@@ -7,6 +7,7 @@ import {
     useFormatCoin,
 } from '@mysten/core';
 import { SUI_TYPE_ARG } from '@mysten/sui.js';
+import clsx from 'clsx';
 
 import { CopyToClipboard } from '~/ui/CopyToClipboard';
 import { DescriptionItem } from '~/ui/DescriptionList';
@@ -18,6 +19,8 @@ import {
     TransactionBlockCard,
     TransactionBlockCardSection,
 } from '~/ui/TransactionBlockCard';
+
+const MAX_GAS_PAYMENT_LENGTH = 10;
 
 interface GasProps {
     amount?: bigint | number | string;
@@ -91,8 +94,15 @@ function TotalGasAmount({ amount }: GasProps) {
 }
 
 function GasPaymentLinks({ objectIds }: { objectIds: string[] }) {
+    const isScrollable = objectIds.length > MAX_GAS_PAYMENT_LENGTH;
+
     return (
-        <div className="flex flex-wrap items-center gap-x-4">
+        <div
+            className={clsx(
+                'flex flex-wrap items-center gap-x-4 gap-y-2',
+                isScrollable && 'h-20 overflow-y-scroll'
+            )}
+        >
             {objectIds.map((objectId, index) => (
                 <div key={index} className="flex items-center gap-x-1.5">
                     <ObjectLink objectId={objectId} />
